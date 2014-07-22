@@ -1,26 +1,40 @@
-require(memisc)
+#require(memisc)
 require(knitr)
 require(reshape2)
 require(dplyr)
-require(rmarkdown)
 require(plyr)
+require(rmarkdown)
+source('service_limits_coverage.R')
 
-wrma <- as.data.set(spss.system.file("//Dolores/Active/Projects/WRMA_Funding_Streams/Phase_1/SurveyData/RW Funding Streams 5.sav"))
+oamc_letters <- letters[1: which(letters == "u")]
+ss_letters    <- letters[1: which(letters == "k")]
+#wrma <- as.data.set(spss.system.file("//Dolores/Active/Projects/WRMA_Funding_Streams/Phase_1/SurveyData/RW Funding Streams 5.sav"))
 load("wrma_df.Rda")
 
 services <-  wrma_df %>% group_by(providerid) %>%
-                     select(contains("\\bQ1[5-6].[2-4].+_r\\b")) %>% 
-                     mutate_each(funs(ifelse(. == "Yes", 1, 0))) %>%
+                     dplyr::select(contains("\\bQ1[5-6].[2-4]._r\\b")) %>%
+                     mutate_each(funs(. == "Yes")) %>%                     
                      group_by()
 
-services$oamc_util_clin <- apply(services %>% select(contains("\\bQ15.[2-4][a-b]_r\\b")), 1, max, na.rm = TRUE)
-services$oamc_nev_cov   <- apply(services %>% select(contains("\\bQ15.[2-4]c_r\\b")), 1, max, na.rm = TRUE)
+#Argh! For loops. Well, they work for now.
+for (i in oamc_letters) {
+  services <- limits_or_nevcov(services, 15, i, 'limits')
+  services <- limits_or_nevcov(services, 15, i, 'nevercov')
+}
 
-services$ss_util_clin  <- apply(services %>% select(contains("\\bQ16.[2-4][a-b]_r\\b")), 1, max, na.rm = TRUE)
-services$ss_nev_cov    <- apply(services %>% select(contains("\\bQ16.[2-4]c_r\\b")), 1, max, na.rm = TRUE)
+for (i in ss_letters) {
+  services <- limits_or_nevcov(services, 16, i, 'limits')
+  services <- limits_or_nevcov(services, 16, i, 'nevercov')
+}
+
+services <- services %>% select(providerid, ends_with("limits"), ends_with("nevercov"))
+services[services == -Inf] <- NA
 
 prov_data <- wrma_df %>% filter(providerid == 353)
-prov_services  <- services %>% (providerid == 353)
+prov_services  <- services %>% filter(providerid == 353)
+
+prov_services[prov_services == 1] <- "Yes"
+prov_services[prov_services == 0] <- "No"
 
 #Characteristics variables for All Grantees
 char <- wrma_df %>%
@@ -33,6 +47,7 @@ char <- wrma_df %>%
                ) %>%
                dplyr::select(providerid, pcmh, hh, `MCO Participation`, mcaid, priv, exch) 
 
+# Characteristics Table
 char_table <- prov_data %>%
              mutate(`Patient centered medical home` = q7, 
                     `Health Home` = q8, 
@@ -59,6 +74,28 @@ char_table <- char_table %>%
 
 names(char_table) <- c("Agency Characteristics", "Your Response", "All Sample Grantees")
 
-oamc_table  <- services %>%
-               select(oamc_clin_util, oamc_nev_cov) %>%
-               summarize()
+# OAMC Table for This Provider
+oamc_prov   <- prov_services %>%
+               select(providerid, starts_with("Q15")) %>%
+               melt(id.var = c("providerid")) %>%
+               mutate(type = substr(variable, 5, nchar(as.character(variable))), 
+               variable = substr(variable, 1, 4)) %>%    
+               group_by(variable, type) %>%
+               dcast(variable ~ type)
+# OAMC for All Providers
+oamc_all    <- services %>%
+               select(providerid, starts_with("Q15")) %>%
+               melt(id.var = c("providerid")) %>%
+               mutate(type = substr(variable, 5, nchar(as.character(variable))), 
+                      variable = substr(variable, 1, 4)) %>%    
+               group_by(variable, type) %>%
+               dplyr::summarise(Average = mean(value, na.rm = TRUE)) %>%
+               mutate(Average = paste(as.character(round(Average * 100, 0)), "%", sep = "")) %>% 
+               dcast(variable ~ type)
+
+# Join Provider Table and All Providers, Name Columns for Output #
+
+oamc_all  <- oamc_prov %>%
+             inner_join(oamc_all, by = "variable")
+pandoc.table(oamc_table, split.tables = Inf, style = 'rmarkdown')
+              
