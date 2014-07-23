@@ -4,12 +4,21 @@ require(reshape2)
 require(dplyr)
 require(plyr)
 require(rmarkdown)
+require(scales)
 source('service_limits_coverage.R')
 
 oamc_letters <- letters[1: which(letters == "u")]
 ss_letters    <- letters[1: which(letters == "k")]
 #wrma <- as.data.set(spss.system.file("//Dolores/Active/Projects/WRMA_Funding_Streams/Phase_1/SurveyData/RW Funding Streams 5.sav"))
 load("wrma_df.Rda")
+
+#Add variables for Tracker survey questions
+wrma_df['record_dollars'] <- apply(wrma_df %>% select(contains("Q25_.+_No")),1,  min, na.rm= TRUE)
+wrma_df['ch_ins'] = regexpr("^We maintain records of changes", wrma_df$Q20) > 0
+wrma_df['proc_or_serv'] <- !is.na(wrma_df$Q26b3) | !is.na(wrma_df$Q26b4)
+
+wrma_df[wrma_df == Inf] <- NA
+wrma_df  <- wrma_df %>% mutate(record_dollars = ifelse(record_dollars == 0 , 1, ifelse(record_dollars == 1, 0, NA)))
 
 services <-  wrma_df %>% group_by(providerid) %>%
                      dplyr::select(contains("\\bQ1[5-6].[2-4]._r\\b")) %>%
@@ -35,6 +44,13 @@ prov_services  <- services %>% filter(providerid == 353)
 
 prov_services[prov_services == 1] <- "Yes"
 prov_services[prov_services == 0] <- "No"
+
+dollars  <- wrma_df %>% 
+            select(providerid, TOTALREVENUE, RWTOTALREVENUE, 
+                   contains("percentrevenue"), 
+                   contains("q29|q30"), 
+                   contains("percentpart")) %>%
+            mutate(rw_share = RWTOTALREVENUE / TOTALREVENUE)
 
 #Characteristics variables for All Grantees
 char <- wrma_df %>%
@@ -69,33 +85,37 @@ char_table <- prov_data %>%
                                        "MCO Participation", "Medicaid", "Private", "Insurance Exchange"))), 
                by = "variable") 
 
-char_table <- char_table %>% 
+char_table <- char_table %>%   
              mutate(value.y = ifelse(value.y != "", paste(as.character(signif(as.numeric(value.y), 2) * 100), "%", sep = ""), value.y))
 
 names(char_table) <- c("Agency Characteristics", "Your Response", "All Sample Grantees")
 
-# OAMC Table for This Provider
-oamc_prov   <- prov_services %>%
-               select(providerid, starts_with("Q15")) %>%
-               melt(id.var = c("providerid")) %>%
-               mutate(type = substr(variable, 5, nchar(as.character(variable))), 
-               variable = substr(variable, 1, 4)) %>%    
-               group_by(variable, type) %>%
-               dcast(variable ~ type)
-# OAMC for All Providers
-oamc_all    <- services %>%
-               select(providerid, starts_with("Q15")) %>%
-               melt(id.var = c("providerid")) %>%
-               mutate(type = substr(variable, 5, nchar(as.character(variable))), 
-                      variable = substr(variable, 1, 4)) %>%    
-               group_by(variable, type) %>%
-               dplyr::summarise(Average = mean(value, na.rm = TRUE)) %>%
-               mutate(Average = paste(as.character(round(Average * 100, 0)), "%", sep = "")) %>% 
-               dcast(variable ~ type)
+# Service Tables for This Provider
+oamc_prov  <- servtable(prov_services, "Q15")
+ss_prov    <- servtable(prov_services, "Q16")
+# services Tables for All Providers
+oamc_all    <- allservtable(services, "Q15")
+ss_all      <- allservtable(services, "Q16")
 
 # Join Provider Table and All Providers, Name Columns for Output #
 
-oamc_all  <- oamc_prov %>%
-             inner_join(oamc_all, by = "variable")
-pandoc.table(oamc_table, split.tables = Inf, style = 'rmarkdown')
+oamc_total  <- oamc_prov %>%
+             inner_join(oamc_all, by = "variable") %>%
+             select(variable, limits.x, limits.y, nevercov.x, nevercov.y) 
+
+names(oamc_total)  <- c("", "Utilization Limits - Your Response", 
+                         "Utilization Limits - National Avg.", 
+                         "Never Covered - Your Response", 
+                         "Never Covered - National Avg.")
+
+ss_total <- ss_prov %>%
+            inner_join(ss_all, by = "variable") %>%
+            select(variable, limits.x, limits.y, nevercov.x, nevercov.y)
+
+names(ss_total)  <- c("", "Utilization Limits - Your Response", 
+                        "Utilization Limits - National Avg.", 
+                        "Never Covered - Your Response", 
+                        "Never Covered - National Avg.")
+
+funds <- fundstable(dollars, 353)
               
