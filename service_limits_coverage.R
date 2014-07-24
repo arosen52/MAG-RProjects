@@ -30,10 +30,8 @@ servtable   <- function (df, id, rex) {
                         variable = substr(variable, 1, 4)) %>%    
                         group_by(variable, type) %>%
                         dcast(variable ~ type) 
-                        return(x)
-}
-
-allservtable <- function(df, rex) {df %>%
+                        
+                        y <-  df %>%
                         select(providerid, starts_with(rex)) %>%
                         melt(id.var = c("providerid")) %>%
                         mutate(type = substr(variable, 5, nchar(as.character(variable))), 
@@ -42,6 +40,18 @@ allservtable <- function(df, rex) {df %>%
                         dplyr::summarise(avg = mean(value, na.rm = TRUE)) %>%
                         mutate(Average = percent(round(as.numeric(avg), 2))) %>% 
                         dcast(variable ~ type)
+                        
+                        x_total  <- x %>%
+                          inner_join(y, by = "variable") %>%
+                          select(variable, limits.x, limits.y, nevercov.x, nevercov.y) %>%
+                          filter(limits.x != "")
+                        
+                        names(x_total)  <- c("name", "Utilization Limits - Your Response", 
+                                                                   "Utilization Limits - National Avg.", 
+                                                                   "Never Covered - Your Response", 
+                                                                   "Never Covered - National Avg.")
+                                           
+                        return(x_total)
 }
 
 fundstable <- function(df, id) {x <- df %>%
@@ -120,7 +130,7 @@ tracker_table <- function(df, id) {
                                                    }
 
 #Characteristics variables for All Grantees
-char <- function(df, id)  { ch <- df %>%
+chartable <- function(df, id)  { ch <- df %>%
                                    mutate(pcmh = q7 == "Yes", 
                                           hh   = regexpr("^Yes", q8) > 0, 
                                          `MCO Participation` = "", 
@@ -131,7 +141,7 @@ char <- function(df, id)  { ch <- df %>%
                                    dplyr::select(providerid, pcmh, hh, `MCO Participation`, mcaid, priv, exch) 
 
 
-                            ch_id_table <- prov_data %>%
+                            ch_id_table <- df %>%
                               filter(providerid == id) %>%
                               mutate(`Patient centered medical home` = q7, 
                                      `Health Home` = q8, 
@@ -158,4 +168,44 @@ ch_id_table <- ch_id_table %>%
 
 names(ch_id_table) <- c("Agency Characteristics", "Your Response", "All Sample Grantees") 
 return(ch_id_table)
+}
+
+make_report <- function (x) {
+  
+  id <- x
+  providername <- providernames['Grantee.Name'][which(providernames['providerid']==x),]
+  filename <- gsub("'|/", "_", providername)
+  oamc_headings <- c('Diagnostic Testing', 'Preventative Care Screenings', 
+                     'Immunization', 'Medication Prescription and Support', 
+                     'Risk Counseling and Risk Management', 
+                     'Specialist Care and Chronic Condition Management')
+  
+  # Characteristics Table
+  
+  p_chars <- chartable(wrma_df, id)
+  
+  # services Tables
+  oamc_all    <- oamc_services %>% 
+    left_join(servtable(services, id, "Q15"), by = "name") %>%
+    select(-name) %>%
+    filter(`Utilization Limits - Your Response` != "" & 
+             `Never Covered - Your Response`      != "" | 
+             OAMCSubservices %in% oamc_headings)
+  
+  names(oamc_all)[1] <- "OAMC Subservices"
+  oamc_all[is.na(oamc_all)] <- ""
+  
+  ss_all      <- sup_services %>%
+    left_join(servtable(services, id, "Q16"), by= "name") %>%
+    select(-name)
+  names(ss_all)[1] <- "Additional Medical and Support Services"
+  
+  # Funding Source Table 
+  funds <- fundstable(dollars, id)
+  
+  # Tracker table
+  
+  tracker <- tracker_table(wrma_df, id)
+  
+  render('ReportTemplate.Rmd', pdf_document(highlight = "default", toc= TRUE), output_file = paste(filename, ".pdf", sep=""))
 }
