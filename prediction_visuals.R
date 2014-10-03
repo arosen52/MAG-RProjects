@@ -1,6 +1,7 @@
 library(ggplot2)
 library(scales)
 library(dplyr)
+library(rmarkdown)
 
 setwd("//Dolores/Active/Projects/DDS/NONMORTALITY/RISK MODEL/CharacteristicsUpdate")
 preds2 <- read.csv("predictions_Jul2013_Jun2014_nose.csv", stringsAsFactors = FALSE)
@@ -28,17 +29,11 @@ preds <- preds %>% group_by(incident) %>%
          left_join(preds2, by = c("incident", "variable")) %>%
          mutate(base = b[which(variable == "_cons")], 
                 #relative_diff = (b / b[which(variable == "_cons")]) -1 ) %>%
-                relative_diff = ifelse(p_wald_cons <= .05, (b / b[which(variable == "_cons")]) -1, NA)) %>%
+                relative_diff = (b / b[which(variable == "_cons")]) -1) %>%
          inner_join(incs2, by = "incident")
         
 
-g <- ggplot(preds %>% filter(group == "Chronic Conditions"), aes(x = varlab, y = Incident))
-g + geom_tile(aes(fill = relative_diff) , colour= "black") + theme_grey(base_size = 9) +
-  scale_x_discrete(expand = c(0, 0)) + scale_y_discrete(expand = c(0,0)) + 
-  scale_fill_gradient2(name = "Relative \nDifference", low = "blue", mid = "white", high = "red", na.value = "grey", labels = percent) + 
-  geom_text(aes(label = ifelse(pvalue <= .05, percent(round(relative_diff, 2)), ""))) +
-  theme(axis.ticks = element_blank(), line = element_blank(), 
-        axis.text.y = element_text(size = rel(1.5), colour = "black"), 
-        axis.text.x = element_text(size = rel(1.5), colour = "black"), 
-        legend.text = element_text(size = rel(1)), 
-        legend.title = element_text(size = rel(1.5))) + ylab("") + xlab("")
+preds$varlab[preds$variable == "1.dual_diag"] <- "Dual Diagnoses"
+save(preds, file = "predictiondata.RData")
+
+render("report_output.Rmd", output_file = "Characterizing Update.pdf")
