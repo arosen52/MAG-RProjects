@@ -1,0 +1,83 @@
+---
+output: pdf_document
+toc: no
+---
+```{r loadlibraries, echo=FALSE, warning = FALSE}
+
+library(knitr)
+library(pander)
+```
+
+```{r createtitle, results='asis', echo=FALSE}
+
+pandoc.header(cat(cat("# ", providername, sep = ""), "Summary of Survey Results", sep = "\n"), level = 1)
+
+```
+
+Thank you for completing the Understanding and Monitoring Funding Streams in Ryan White Clinics Survey. 
+Your response to the survey was crucial in providing the HIV/AIDS Bureau (HAB) and policymakers with a better understanding of how the 
+Ryan White HIV/AIDS Program (RWHAP) currently provides primary outpatient health care and essential support services to both uninsured 
+and underinsured clients. This document summarizes your survey responses compared to other Part C and D grantee/providers that responded 
+to the survey.
+
+```{r chartable, results='asis',echo=FALSE}
+  set.caption("Patient Centered Medical Home, Health Home, and MCO Participation")
+  pandoc.header("Grantee Characteristics", level = 3)
+  pandoc.table(p_chars, split.tables = Inf, style = 'multiline', emphasize.strong.rows = 3, justify = c('left', 'left', 'centre'))
+
+```
+
+
+```{r oamc_table, results='asis', echo=FALSE, warning=FALSE}
+
+if (length(oamc_all[, 1]) > 0) {
+  emph_rows <- which(oamc_all$'OAMC Subservices' %in% oamc_headings)
+  
+  pandoc.header('Utilization Limits/Clinical Requirements and Insurance Coverage, OAMC Subservices', level = 3)
+  set.caption('OAMC Subservices')
+  pandoc.table(oamc_all, split.tables = Inf, style = 'multiline', 
+               emphasize.strong.rows = emph_rows, 
+               split.cells = 75,
+               justify = c('left', 'centre', 'centre', 'centre', 'centre'))
+} 
+```
+
+```{r ss_table, results='asis', echo=FALSE, warning=FALSE}
+
+if (length(ss_all[, 1]) > 0) {
+  
+  pandoc.header('Utilization Limits/Clinical Requirements and Insurance Coverage, Support Services', level = 3)
+  set.caption('Support Services')  
+  pandoc.table(ss_all, split.tables = Inf, style = 'multiline', 
+               split.cells = 75,
+               justify = c('left', 'centre', 'centre', 'centre', 'centre'))
+}
+```
+
+```{r fundingtable, results='asis', echo=FALSE, warning=FALSE}
+if (length(funds[, 1]) > 0) {
+  pandoc.header('Reported Data on Funding Sources as a Share of Total Dollars', level = 3)
+  set.caption('Funding Source Dollar Amounts')
+  
+  pandoc.table(funds, split.tables = Inf, style = 'multiline', 
+             split.cells = 75,
+             emphasize.strong.rows = nrow(funds), 
+             justify = c('left', 'centre', 'centre', 'centre'))
+}
+```
+
+```{r trackertable, results = 'asis', echo=FALSE, warning=FALSE}
+if (length(tracker[, 1]) > 0) {
+  
+  pandoc.header('Ability to Use the Ryan White Services Tracker', level = 3)
+  
+  set.caption('Ryan White Services Tracker')  
+  pandoc.table(tracker, split.tables = Inf, style = 'multiline', 
+               split.cells = 75,
+               justify = c('left', 'centre', 'centre'))
+}
+```
+
+
+
+

@@ -62,5 +62,5 @@ dollars  <- wrma_df %>%
 
 ids <- wrma_df %>% select(providerid) 
 
-make_report(210)
-#lapply(ids[c(1,3, 5, 7, 9),], make_report)
+lapply(ids[, 1], make_report)
+

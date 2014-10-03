@@ -46,10 +46,10 @@ servtable   <- function (df, id, rex) {
                           select(variable, limits.x, limits.y, nevercov.x, nevercov.y) %>%
                           filter(limits.x != "")
                         
-                        names(x_total)  <- c("name", "Utilization Limits - Your Response", 
-                                                                   "Utilization Limits - National Avg.", 
+                        names(x_total)  <- c("name", "Util. Limits/Clin. Requirements - Your Response", 
+                                                                   "Util. Limits/Clin. Requirements - Sample Avg.", 
                                                                    "Never Covered - Your Response", 
-                                                                   "Never Covered - National Avg.")
+                                                                   "Never Covered - Sample Avg.")
                                            
                         return(x_total)
 }
@@ -97,6 +97,9 @@ fundstable <- function(df, id) {x <- df %>%
                             
                             names(x) <- c("Funding Source", "Your Response - $", "Your Response - %", "Average of All Sample Grantees")
                             
+                            x[, 2] <- dollar(x[,2])
+                            x[, 3] <- percent(round(as.numeric(x[, 3]), 2))
+                            x[, 4] <- percent(round(as.numeric(x[, 4]), 2))
                             return(x)
 
 } 
@@ -173,7 +176,7 @@ return(ch_id_table)
 make_report <- function (x) {
   
   id <- x
-  providername <- providernames['Grantee.Name'][which(providernames['providerid']==x),]
+  providername <- as.character(wrma_df['q1'][which(wrma_df['providerid']==x),])
   filename <- gsub("'|/", "_", providername)
   oamc_headings <- c('Diagnostic Testing', 'Preventative Care Screenings', 
                      'Immunization', 'Medication Prescription and Support', 
@@ -188,16 +191,22 @@ make_report <- function (x) {
   oamc_all    <- oamc_services %>% 
     left_join(servtable(services, id, "Q15"), by = "name") %>%
     select(-name) %>%
-    filter(`Utilization Limits - Your Response` != "" & 
+    filter(`Util. Limits/Clin. Requirements - Your Response` != "" & 
              `Never Covered - Your Response`      != "" | 
-             OAMCSubservices %in% oamc_headings)
-  
+             OAMCSubservices %in% oamc_headings) %>%
+    filter(!(OAMCSubservices %in% oamc_headings & lead(OAMCSubservices) %in% oamc_headings)) %>%
+    dplyr::mutate(last = n(), n = row_number()) %>%
+    filter(!(OAMCSubservices %in% oamc_headings & n == last)) %>%
+    select(-last, -n)                
+  print(oamc_all)         
   names(oamc_all)[1] <- "OAMC Subservices"
   oamc_all[is.na(oamc_all)] <- ""
   
   ss_all      <- sup_services %>%
     left_join(servtable(services, id, "Q16"), by= "name") %>%
-    select(-name)
+    select(-name) 
+  
+  ss_all <- filter(ss_all, complete.cases(ss_all[, 2:5]))
   names(ss_all)[1] <- "Additional Medical and Support Services"
   
   # Funding Source Table 
@@ -207,5 +216,7 @@ make_report <- function (x) {
   
   tracker <- tracker_table(wrma_df, id)
   
-  render('ReportTemplate.Rmd', pdf_document(highlight = "default", toc= TRUE), output_file = paste(filename, ".pdf", sep=""))
+  render('ReportTemplate.Rmd', pdf_document(highlight = "default", toc= FALSE), 
+         output_file = paste(filename, ".pdf", sep=""), 
+         output_dir  = "//DOLORES/Active/Projects/WRMA_Funding_Streams/Phase_1/SurveyData/IndividualReports")
 }
